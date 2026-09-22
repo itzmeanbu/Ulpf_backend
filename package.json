@@ -1,0 +1,23 @@
+{
+  "name": "ulpf-backend",
+  "version": "1.0.0",
+  "description": "Universal Log Pre-processing Framework - Backend API",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "argon2": "^0.31.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  }
+}
