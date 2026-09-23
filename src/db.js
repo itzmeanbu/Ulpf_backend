@@ -99,24 +99,21 @@ async function initDb() {
   // Enable gen_random_uuid() (pgcrypto) - safe no-op if already enabled.
   await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`).catch(() => {});
 
-  // Bootstrap first admin if none exists yet.
-  const { rows: admins } = await pool.query(
-    `SELECT id FROM users WHERE role = 'admin' LIMIT 1`
+
+// BOOTSTRAP_ADMIN_PASSWORD in Render and restarting always takes effect.
+const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
+const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+if (email && password) {
+  const hash = await argon2.hash(password, { type: argon2.argon2id });
+  await pool.query(
+    `INSERT INTO users (email, password_hash, role, sensitive_access)
+     VALUES ($1, $2, 'admin', TRUE)
+     ON CONFLICT (email) DO UPDATE
+     SET password_hash = EXCLUDED.password_hash, role = 'admin', sensitive_access = TRUE`,
+    [email, hash]
   );
-  if (admins.length === 0) {
-    const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
-    const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-    if (email && password) {
-      const hash = await argon2.hash(password, { type: argon2.argon2id });
-      await pool.query(
-        `INSERT INTO users (email, password_hash, role, sensitive_access)
-         VALUES ($1, $2, 'admin', TRUE)
-         ON CONFLICT (email) DO NOTHING`,
-        [email, hash]
-      );
-      console.log(`[ULPF] Bootstrap admin ensured: ${email}`);
-    }
-  }
+  console.log(`[ULPF] Bootstrap admin ensured/synced: ${email}`);
+}
 
   // Bootstrap the secondary unlock password if not set yet.
   const { rows: setting } = await pool.query(
