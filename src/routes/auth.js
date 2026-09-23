@@ -5,6 +5,7 @@ const { z } = require('zod');
 const { pool } = require('../db');
 const { checkFailedLogins } = require('../services/alerts');
 const { recordAudit } = require('../services/audit');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -100,6 +101,21 @@ router.post('/login', async (req, res) => {
 
   await recordAudit(user.id, 'login', {});
   res.json({ token, role: user.role });
+});
+
+// GET /api/auth/me  -> { id, email, role }
+// Used by the frontend on page load/refresh to restore the session from
+// a stored token. Was missing entirely, which caused a refresh right
+// after login to bounce the user back to /login.
+router.get('/me', requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, email, role FROM users WHERE id = $1`,
+    [req.user.id]
+  );
+  if (!rows[0]) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+  res.json(rows[0]);
 });
 
 module.exports = router;
