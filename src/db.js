@@ -101,8 +101,8 @@ async function initDb() {
 
 
 // BOOTSTRAP_ADMIN_PASSWORD in Render and restarting always takes effect.
-const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
-const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+const email = (process.env.BOOTSTRAP_ADMIN_EMAIL || '').trim().toLowerCase();
+const password = (process.env.BOOTSTRAP_ADMIN_PASSWORD || '').trim();
 if (email && password) {
   const hash = await argon2.hash(password, { type: argon2.argon2id });
   await pool.query(
