@@ -366,4 +366,55 @@ router.post('/:eventId/unlock', async (req, res) => {
   });
 });
 
+const unlockFieldSchema = z.object({
+  secondaryPassword: z.string().min(1, 'secondaryPassword is required.'),
+  field: z.string().min(1, 'field is required.'),
+});
+
+// POST /api/logs/:eventId/unlock-field  { field, secondaryPassword } -> one original value + its AES ciphertext
+router.post('/:eventId/unlock-field', async (req, res) => {
+  if (!req.user!.sensitiveAccess) {
+    return res.status(403).json({ error: 'You are not approved for sensitive log access.' });
+  }
+  const parsed = unlockFieldSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const { rows: settingRows } = await pool.query(
+    `SELECT value FROM settings WHERE key = 'secondary_password_hash'`
+  );
+  const secondaryHash = settingRows[0]?.value;
+  const passwordOk = secondaryHash
+    ? await argon2.verify(secondaryHash, parsed.data.secondaryPassword)
+    : false;
+  if (!passwordOk) {
+    return res.status(403).json({ error: 'Incorrect secondary password.' });
+  }
+
+  const { rows } = await pool.query(`SELECT * FROM logs WHERE id = $1`, [req.params.eventId]);
+  const log = rows[0];
+  if (!log) return res.status(404).json({ error: 'Log not found.' });
+
+  const decrypted = decryptObject({
+    blob: log.encrypted_blob,
+    iv: log.encrypted_iv,
+    tag: log.encrypted_tag,
+  });
+  const field = parsed.data.field;
+  if (!Object.prototype.hasOwnProperty.call(decrypted, field)) {
+    return res.status(404).json({ error: 'Field not found.' });
+  }
+
+  // Password is never stored - only who, which log, and which field.
+  await recordAudit(req.user!.id, 'log_field_unlock', { eventId: log.id, field });
+
+  res.json({
+    eventId: log.id,
+    field,
+    value: decrypted[field],
+    encrypted: encryptObject({ [field]: decrypted[field] }), // { blob, iv, tag }
+  });
+});
+
 export default router;
