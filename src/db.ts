@@ -60,8 +60,12 @@ export async function initDb(): Promise<void> {
       user_id UUID REFERENCES users(id),
       action TEXT NOT NULL,
       details JSONB,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      deleted_at TIMESTAMPTZ,
+      deleted_by UUID REFERENCES users(id)
     );
+    ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+    ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id);
 
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
@@ -105,6 +109,8 @@ export async function initDb(): Promise<void> {
     ALTER TABLE users       ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id);
     ALTER TABLE alerts      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
     ALTER TABLE alerts      ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id);
+    -- Which account an alert is about (used for auto-suspend after repeated alerts).
+    ALTER TABLE alerts      ADD COLUMN IF NOT EXISTS target_email TEXT;
     ALTER TABLE log_sources ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
     ALTER TABLE log_sources ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id);
   `);
