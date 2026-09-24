@@ -1,0 +1,85 @@
+/* Styles for the Logs, Alerts, Admin and Settings pages */
+.pg-title-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.pg-title-row h1 { font-size:1.5rem; }
+.pg-stack { display:flex; flex-direction:column; gap:20px; }
+.pg-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.pg-input, .pg-select, .pg-textarea {
+  background:var(--color-bg-tertiary); border:1px solid var(--color-border); color:var(--color-text-primary);
+  border-radius:8px; padding:9px 12px; font-size:0.9rem; font-family:inherit; outline:none;
+}
+.pg-input:focus, .pg-select:focus, .pg-textarea:focus { border-color:var(--color-accent); }
+.pg-textarea { width:100%; min-height:130px; font-family:monospace; resize:vertical; }
+.pg-input.grow { flex:1; min-width:180px; }
+.pg-btn { background:var(--color-accent); color:#fff; border:none; border-radius:8px; padding:9px 16px; font-size:0.85rem; font-weight:500; cursor:pointer; }
+.pg-btn:hover { background:var(--color-accent-hover); }
+.pg-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.pg-btn.ghost { background:var(--color-bg-tertiary); color:var(--color-text-secondary); border:1px solid var(--color-border); }
+.pg-btn.danger { background:rgba(239,68,68,0.15); color:var(--color-danger); }
+.pg-btn.small { padding:5px 10px; font-size:0.78rem; }
+.pg-table-wrap { overflow-x:auto; }
+.pg-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+.pg-table th { text-align:left; padding:10px 14px; color:var(--color-text-muted); font-weight:600; font-size:0.75rem; text-transform:uppercase; border-bottom:1px solid var(--color-border); white-space:nowrap; }
+.pg-table td { padding:10px 14px; border-bottom:1px solid var(--color-border); vertical-align:middle; }
+.pg-table tr:last-child td { border-bottom:none; }
+.pg-msg { padding:10px 14px; border-radius:8px; font-size:0.85rem; }
+.pg-msg.ok { background:rgba(34,197,94,0.12); color:var(--color-success); }
+.pg-msg.err { background:rgba(239,68,68,0.12); color:var(--color-danger); }
+.pg-muted { color:var(--color-text-muted); font-size:0.85rem; }
+.pg-empty { text-align:center; padding:28px; color:var(--color-text-muted); }
+.pg-tabs { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--color-border); margin-bottom:20px; }
+.pg-tab { background:none; border:none; color:var(--color-text-secondary); padding:10px 14px; cursor:pointer; font-size:0.9rem; border-bottom:2px solid transparent; }
+.pg-tab.active { color:var(--color-accent); border-bottom-color:var(--color-accent); }
+.pg-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
+.pg-card { background:var(--color-bg-card); border:1px solid var(--color-border); border-radius:12px; padding:16px; }
+.pg-card .num { font-size:1.6rem; font-weight:700; }
+.pg-card .lbl { color:var(--color-text-muted); font-size:0.8rem; margin-top:4px; }
+.pg-kv { display:grid; grid-template-columns:150px 1fr; gap:6px 14px; font-size:0.85rem; }
+.pg-kv dt { color:var(--color-text-muted); }
+.pg-kv dd { word-break:break-all; margin:0; }
+.pg-pre { background:var(--color-bg-tertiary); border-radius:8px; padding:12px; font-size:0.78rem; overflow-x:auto; white-space:pre-wrap; word-break:break-all; max-height:260px; }
+.pg-toggle { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:0.9rem; }
+.pg-toggle input { width:auto; accent-color:var(--color-accent); }
+.pg-field { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-width:320px; font-size:0.85rem; color:var(--color-text-secondary); }
+
+/* ===== Button click / loading feedback (ActionButton) ===== */
+.pg-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.pg-btn:active:not(:disabled) { transform: scale(0.95); }
+.pg-btn.is-pressed:not(:disabled) {
+  transform: scale(0.95);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+.pg-btn.danger.is-pressed:not(:disabled) { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25); }
+.pg-btn.is-busy { cursor: progress; opacity: 0.85; }
+.pg-btn-spin { display: inline-flex; align-items: center; gap: 6px; }
+.pg-spin-icon { animation: pg-spin 0.8s linear infinite; }
+@keyframes pg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Plain (non-ActionButton) buttons/links also get a pressed cue for free. */
+.btn:active:not(:disabled), button:active:not(:disabled) { transform: scale(0.97); }
+.btn, button { transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease, opacity 0.15s ease; }
+.btn.is-busy { opacity: 0.75; cursor: progress; }
+
+/* ===== Upload queue: shows each pasted log line one at a time ===== */
+.upload-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--color-bg-tertiary);
+  font-size: 0.85rem;
+  animation: pg-fade-in 0.2s ease;
+}
+.upload-queue-item.done { background: rgba(34, 197, 94, 0.08); }
+.upload-queue-item.error { background: rgba(239, 68, 68, 0.08); }
+.upload-queue-item.processing { background: rgba(99, 102, 241, 0.1); }
+.upload-queue-icon { flex-shrink: 0; width: 20px; display: flex; align-items: center; justify-content: center; }
+.upload-queue-text { flex: 1; overflow-wrap: anywhere; }
+@keyframes pg-fade-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
