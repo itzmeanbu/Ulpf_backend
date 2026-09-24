@@ -1,1 +1,0 @@
-CEF:0|Cisco|ASA|9.1|106023|Deny tcp connection|5|src=192.168.1.20 dst=10.0.0.5 act=denied proto=TCP rt=Sep 20 2026 14:32:00

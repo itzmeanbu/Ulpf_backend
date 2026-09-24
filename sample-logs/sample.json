@@ -1,9 +1,0 @@
-{
-  "vendor": "Fortinet",
-  "eventType": "firewall-deny",
-  "timestamp": "2026-09-20T14:32:00Z",
-  "sourceIP": "192.168.1.20",
-  "destIP": "10.0.0.5",
-  "action": "Blocked connection attempt for user Dhivya (dhivya@example.com)",
-  "protocol": "TCP"
-}
