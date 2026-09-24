@@ -105,6 +105,7 @@ router.get('/audit', async (req, res) => {
     `SELECT al.id, al.action, al.details, al.created_at, u.email AS user_email
      FROM audit_log al
      LEFT JOIN users u ON u.id = al.user_id
+     WHERE al.deleted_at IS NULL
      ORDER BY al.created_at DESC
      LIMIT 200`
   );
@@ -346,6 +347,20 @@ router.delete('/alerts/:id', async (req, res) => {
   res.json({ status: 'deleted' });
 });
 
+// POST /api/admin/alerts/bulk-delete  { ids } -> moves many alerts to the Recycle Bin
+const alertIdsSchema = z.object({ ids: z.array(z.string()).min(1, 'No alerts selected.') });
+router.post('/alerts/bulk-delete', async (req, res) => {
+  const parsed = alertIdsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { rows } = await pool.query(
+    `UPDATE alerts SET deleted_at = now(), deleted_by = $1
+     WHERE id = ANY($2::uuid[]) AND deleted_at IS NULL RETURNING id`,
+    [req.user!.id, parsed.data.ids]
+  );
+  await recordAudit(req.user!.id, 'alerts_bulk_deleted', { count: rows.length, ids: rows.map((r: any) => r.id) });
+  res.json({ status: 'deleted', count: rows.length });
+});
+
 /* ---------------------------------------------------------------------- */
 /* Security Control (read-only status indicators)                          */
 /* ---------------------------------------------------------------------- */
@@ -557,17 +572,19 @@ async function hardDeleteUser(id: string): Promise<{ id: string; email: string }
 
 // GET /api/admin/recycle-bin/summary -> item counts per category, for tab badges
 router.get('/recycle-bin/summary', async (req, res) => {
-  const [logs, accounts, alerts, sources] = await Promise.all([
+  const [logs, accounts, alerts, sources, audit] = await Promise.all([
     pool.query(`SELECT COUNT(*)::int AS count FROM logs WHERE deleted_at IS NOT NULL`),
     pool.query(`SELECT COUNT(*)::int AS count FROM users WHERE deleted_at IS NOT NULL`),
     pool.query(`SELECT COUNT(*)::int AS count FROM alerts WHERE deleted_at IS NOT NULL`),
     pool.query(`SELECT COUNT(*)::int AS count FROM log_sources WHERE deleted_at IS NOT NULL`),
+    pool.query(`SELECT COUNT(*)::int AS count FROM audit_log WHERE deleted_at IS NOT NULL`),
   ]);
   res.json({
     logs: logs.rows[0].count,
     accounts: accounts.rows[0].count,
     alerts: alerts.rows[0].count,
     sources: sources.rows[0].count,
+    audit: audit.rows[0].count,
   });
 });
 
@@ -635,6 +652,94 @@ router.post('/recycle-bin/accounts/empty', async (req, res) => {
   }
   await recordAudit(req.user!.id, 'accounts_recycle_bin_emptied', { count });
   res.json({ status: 'emptied', count });
+});
+
+// --- Audit log recycle bin ---
+
+router.get('/recycle-bin/audit', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT al.id, al.action, al.details, al.created_at, al.deleted_at,
+            u.email AS user_email, d.email AS deleted_by_email
+     FROM audit_log al
+     LEFT JOIN users u ON u.id = al.user_id
+     LEFT JOIN users d ON d.id = al.deleted_by
+     WHERE al.deleted_at IS NOT NULL
+     ORDER BY al.deleted_at DESC`
+  );
+  res.json(rows);
+});
+
+router.delete('/audit/:id', async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE audit_log SET deleted_at = now(), deleted_by = $1
+     WHERE id = $2 AND deleted_at IS NULL RETURNING id`,
+    [req.user!.id, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Audit entry not found.' });
+  await recordAudit(req.user!.id, 'audit_entry_deleted', { auditId: req.params.id });
+  res.json({ status: 'deleted' });
+});
+
+router.post('/audit/bulk-delete', async (req, res) => {
+  const parsed = idsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { rows } = await pool.query(
+    `UPDATE audit_log SET deleted_at = now(), deleted_by = $1
+     WHERE id = ANY($2::uuid[]) AND deleted_at IS NULL RETURNING id`,
+    [req.user!.id, parsed.data.ids]
+  );
+  await recordAudit(req.user!.id, 'audit_entries_bulk_deleted', { count: rows.length, ids: rows.map((r: any) => r.id) });
+  res.json({ status: 'deleted', count: rows.length });
+});
+
+router.post('/recycle-bin/audit/:id/restore', async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE audit_log SET deleted_at = NULL, deleted_by = NULL
+     WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id`,
+    [req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Audit entry not found in the recycle bin.' });
+  await recordAudit(req.user!.id, 'audit_entry_restored', { auditId: req.params.id });
+  res.json({ status: 'restored' });
+});
+
+router.post('/recycle-bin/audit/restore-bulk', async (req, res) => {
+  const parsed = idsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { rows } = await pool.query(
+    `UPDATE audit_log SET deleted_at = NULL, deleted_by = NULL
+     WHERE id = ANY($1::uuid[]) AND deleted_at IS NOT NULL RETURNING id`,
+    [parsed.data.ids]
+  );
+  await recordAudit(req.user!.id, 'audit_entries_bulk_restored', { count: rows.length });
+  res.json({ status: 'restored', count: rows.length });
+});
+
+router.delete('/recycle-bin/audit/:id', async (req, res) => {
+  const { rows } = await pool.query(
+    `DELETE FROM audit_log WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id`,
+    [req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Audit entry not found in the recycle bin.' });
+  await recordAudit(req.user!.id, 'audit_entry_permanently_deleted', { auditId: req.params.id });
+  res.json({ status: 'permanently_deleted' });
+});
+
+router.post('/recycle-bin/audit/permanent-delete-bulk', async (req, res) => {
+  const parsed = idsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { rows } = await pool.query(
+    `DELETE FROM audit_log WHERE id = ANY($1::uuid[]) AND deleted_at IS NOT NULL RETURNING id`,
+    [parsed.data.ids]
+  );
+  await recordAudit(req.user!.id, 'audit_entries_bulk_permanently_deleted', { count: rows.length });
+  res.json({ status: 'permanently_deleted', count: rows.length });
+});
+
+router.post('/recycle-bin/audit/empty', async (req, res) => {
+  const { rows } = await pool.query(`DELETE FROM audit_log WHERE deleted_at IS NOT NULL RETURNING id`);
+  await recordAudit(req.user!.id, 'audit_recycle_bin_emptied', { count: rows.length });
+  res.json({ status: 'emptied', count: rows.length });
 });
 
 // --- Alerts recycle bin ---
@@ -775,10 +880,11 @@ router.post('/recycle-bin/sources/empty', async (req, res) => {
 // POST /api/admin/recycle-bin/empty-all -> the master "Empty Recycle Bin"
 // button: permanently deletes everything in every category at once.
 router.post('/recycle-bin/empty-all', async (req, res) => {
-  const [logsResult, alertsResult, sourcesResult] = await Promise.all([
+  const [logsResult, alertsResult, sourcesResult, auditResult] = await Promise.all([
     pool.query(`DELETE FROM logs WHERE deleted_at IS NOT NULL RETURNING id`),
     pool.query(`DELETE FROM alerts WHERE deleted_at IS NOT NULL RETURNING id`),
     pool.query(`DELETE FROM log_sources WHERE deleted_at IS NOT NULL RETURNING id`),
+    pool.query(`DELETE FROM audit_log WHERE deleted_at IS NOT NULL RETURNING id`),
   ]);
   const { rows: deletedUsers } = await pool.query(`SELECT id FROM users WHERE deleted_at IS NOT NULL`);
   let accountsCount = 0;
@@ -790,6 +896,7 @@ router.post('/recycle-bin/empty-all', async (req, res) => {
     logs: logsResult.rows.length,
     alerts: alertsResult.rows.length,
     sources: sourcesResult.rows.length,
+    audit: auditResult.rows.length,
     accounts: accountsCount,
   };
   await recordAudit(req.user!.id, 'recycle_bin_emptied_all', summary);
