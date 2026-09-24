@@ -1,4 +1,5 @@
 import { pool } from '../db';
+import { recordAudit } from './audit';
 
 async function getAiSettings(): Promise<any> {
   const { rows } = await pool.query(
@@ -22,6 +23,35 @@ async function getAiSettings(): Promise<any> {
 const FAILED_LOGIN_THRESHOLDS: Record<string, number> = { low: 8, medium: 5, high: 3 };
 const CORRELATION_THRESHOLDS: Record<string, number> = { low: 5, medium: 3, high: 2 };
 
+// An account is suspended when MORE than this many alerts were raised about it
+// within the last 24 hours (so the 4th alert triggers the suspension).
+const SUSPEND_AFTER_ALERTS = 3;
+
+async function suspendIfTooManyAlerts(email: string): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM alerts
+     WHERE target_email = $1 AND deleted_at IS NULL
+       AND created_at > now() - interval '24 hours'`,
+    [email]
+  );
+  if (rows[0].count <= SUSPEND_AFTER_ALERTS) return;
+
+  // The admin account is never suspended (an attacker could lock everyone out).
+  const { rows: suspended } = await pool.query(
+    `UPDATE users SET disabled = TRUE
+     WHERE email = $1 AND role != 'admin' AND disabled = FALSE AND deleted_at IS NULL
+     RETURNING id`,
+    [email]
+  );
+  if (!suspended[0]) return;
+
+  await pool.query(
+    `INSERT INTO alerts (reason, severity) VALUES ($1, 'high')`,
+    [`Account ${email} was automatically suspended after more than ${SUSPEND_AFTER_ALERTS} security alerts in 24 hours.`]
+  );
+  await recordAudit(null, 'user_auto_suspended', { email, userId: suspended[0].id });
+}
+
 export async function checkFailedLogins(email: string): Promise<void> {
   const settings = await getAiSettings();
   if (!settings.anomalyDetection) return;
@@ -39,10 +69,11 @@ export async function checkFailedLogins(email: string): Promise<void> {
   const count = rows[0].count;
   if (count >= threshold && settings.automaticAlerts) {
     await pool.query(
-      `INSERT INTO alerts (reason, severity)
-       VALUES ($1, 'high')`,
-      [`${count} failed login attempts for ${email} in the last ${WINDOW_MINUTES} minutes.`]
+      `INSERT INTO alerts (reason, severity, target_email)
+       VALUES ($1, 'high', $2)`,
+      [`${count} failed login attempts for ${email} in the last ${WINDOW_MINUTES} minutes.`, email]
     );
+    await suspendIfTooManyAlerts(email);
   }
 }
 
