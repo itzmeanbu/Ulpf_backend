@@ -7,6 +7,7 @@ const IP_IN_TEXT_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 const PHONE_RE = /\b(\+?\d{1,3}[- ]?)?\(?\d{3,4}\)?[- ]?\d{3,4}[- ]?\d{3,4}\b/g;
 const API_KEY_RE = /\b(?:key|token|apikey|api_key|secret)[=:]\s*[A-Za-z0-9\-_]{8,}/gi;
 const PASSWORD_RE = /\b(?:pass|password|pwd)[=:]\s*\S+/gi;
+const USER_RE = /\b(user|username|usr|name)=([A-Za-z0-9._-]+)/gi;
 
 export const DEFAULT_MASKING_CONFIG: MaskingConfig = {
   email: true,
@@ -14,6 +15,7 @@ export const DEFAULT_MASKING_CONFIG: MaskingConfig = {
   apiKey: true,
   phone: true,
   ip: true,
+  username: true,
 };
 
 function maskEmail(str: string): string {
@@ -21,7 +23,8 @@ function maskEmail(str: string): string {
     const at = m.lastIndexOf('@');
     const user = m.slice(0, at);
     const tld = m.slice(m.lastIndexOf('.') + 1);
-    return `${user.replace(/\*/g, '').slice(0, 1) || '*'}****@****.${tld}`;
+    const clean = user.replace(/\*/g, '');
+    return `${clean.slice(0, 4) || '*'}****@****.${tld}`;
   });
 }
 
@@ -44,6 +47,10 @@ function maskPassword(str: string): string {
   return str.replace(PASSWORD_RE, (m) => m.split(/[=:]/)[0] + '=****REDACTED****');
 }
 
+function maskUser(str: string): string {
+  return str.replace(USER_RE, (_m, key, val) => `${key}=${String(val).slice(0, 4)}****`);
+}
+
 export function maskIp(ip: string | null | undefined): any {
   if (!ip) return ip;
   const parts = ip.split('.');
@@ -59,6 +66,7 @@ export function maskFreeText(text: string | null | undefined, config: MaskingCon
   if (config.phone !== false) out = maskPhone(out);
   if (config.apiKey !== false) out = maskApiKey(out);
   if (config.password !== false) out = maskPassword(out);
+  if (config.username !== false) out = maskUser(out);
   return out;
 }
 
